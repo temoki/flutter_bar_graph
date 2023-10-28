@@ -43,7 +43,7 @@ class _BarGraphState extends State<BarGraphWidget>
         animation: _controller,
         builder: (context, _) => CustomPaint(
           painter: _Painter(
-            values: [1480, 700, 900, 1300, 400, 1200, 1300, 450],
+            values: [1420, 1780, 700, 900, 1300, 400, 1200, 1300, 450, 900],
             animationValue: _animation.value,
           ),
         ),
@@ -63,17 +63,26 @@ class _Painter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final barBottomY = size.height - 24.0;
-
     final maxValue = values.reduce(math.max);
 
-    // 目盛り数字を描画する
+    const xLabelAreaHeight = 24.0;
+    final graphAreaBottomY = size.height - xLabelAreaHeight;
+    var graphAreaTopY = 0.0;
+    var graphAreaRightX = 0.0;
+
+    // デバッグ用に描画エリアを塗りつぶす
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = Colors.grey.withOpacity(0.1),
+    );
+
+    // Y軸の目盛りラベルを描画する
     final yScaleInterval = _calcScaleInterval(maxValue) ?? maxValue;
     final yScaleCount = (maxValue / yScaleInterval).ceil();
+    final yScaleMaxValue = yScaleInterval * yScaleCount;
     final yScaleLabelFormatter = intl.NumberFormat("#,###");
-    var yRightOffset = 0.0;
-    var yTopOffset = 0.0;
-    for (var i = 0; i <= yScaleCount; i++) {
+    var yScaleMaxLabelWidth = 0.0;
+    for (var i = yScaleCount; i >= 0; i--) {
       final scaleLabelValue = yScaleInterval * i;
       final textPainter = TextPainter(
         text: TextSpan(
@@ -88,37 +97,46 @@ class _Painter extends CustomPainter {
       textPainter.layout();
 
       if (i == yScaleCount) {
-        yTopOffset = math.max(yTopOffset, textPainter.height * 0.5);
+        yScaleMaxLabelWidth = textPainter.width;
+        graphAreaRightX = yScaleMaxLabelWidth + 6.0 /* margin */;
+        graphAreaTopY = math.max(graphAreaTopY, textPainter.height * 0.5);
       }
-      yRightOffset = math.max(yRightOffset, textPainter.width);
-      final x = size.width - textPainter.width;
-      final y = barBottomY - (scaleLabelValue / maxValue) * barBottomY;
+
       textPainter.paint(
-        canvas,
-        Offset(x, y - textPainter.height * 0.5),
-      );
+          canvas,
+          Offset(
+            size.width - yScaleMaxLabelWidth,
+            (graphAreaBottomY - graphAreaTopY) *
+                (1 - scaleLabelValue / yScaleMaxValue),
+          ));
     }
 
-    final yScaleMax = yScaleInterval * yScaleCount;
-    const yRightMargin = 6.0;
-    final unitWidth =
-        (size.width - (yRightMargin + yRightOffset)) / values.length;
+    // X軸の目盛りラベル・棒グラフを描画する
+    final yLabelAreaWidth = size.width - graphAreaRightX;
+    final unitWidth = yLabelAreaWidth / values.length;
     for (var i = 0; i < values.length; i++) {
       final value = values[i];
       final barWidth = unitWidth * 0.25;
-      final barHeight =
-          (value / yScaleMax) * (barBottomY - yTopOffset) * animationValue;
+      final barHeight = (value / yScaleMaxValue) *
+          (graphAreaBottomY - graphAreaTopY) *
+          animationValue;
       canvas.save();
       canvas.translate(i * unitWidth + unitWidth * 0.5, 0);
 
+      // 棒グラフを描画する
       canvas.drawRect(
-        Rect.fromLTWH(-barWidth * 0.5, yTopOffset + barBottomY - barHeight,
-            barWidth, barHeight),
+        Rect.fromLTWH(
+          -barWidth * 0.5,
+          graphAreaBottomY - barHeight,
+          barWidth,
+          barHeight,
+        ),
         Paint()
           ..color = Colors.green
           ..style = PaintingStyle.fill,
       );
 
+      // X軸ラベルを描画する
       final textPainter = TextPainter(
         text: TextSpan(
           text: '${i + 1}',
@@ -135,11 +153,12 @@ class _Painter extends CustomPainter {
         Offset(-textPainter.width * 0.5, size.height - textPainter.height),
       );
 
+      // 破線を描画する
       _drawDashedVerticalLine(
         canvas,
         unitWidth * 0.5,
+        graphAreaTopY,
         size.height,
-        0,
         Paint()
           ..color = Colors.black
           ..style = PaintingStyle.stroke
@@ -153,9 +172,9 @@ class _Painter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 
-  // 破線を描画する
+// 破線を描画する
   void _drawDashedVerticalLine(
     Canvas canvas,
     double x,
@@ -175,7 +194,7 @@ class _Painter extends CustomPainter {
     }
   }
 
-  // 桁数を求める
+// 桁数を求める
   int _calcDigit(int value) {
     return value > 0
         ? math.pow(10, math.log(value) ~/ math.log(10)).toInt()
