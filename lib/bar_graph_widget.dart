@@ -63,25 +63,21 @@ class _Painter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final maxValue = values.reduce(math.max);
-
-    const xLabelAreaHeight = 24.0;
-    final graphAreaBottomY = size.height - xLabelAreaHeight;
-    var graphAreaTopY = 0.0;
-    var graphAreaRightX = 0.0;
+    final canvasRect = Rect.fromLTWH(0, 0, size.width, size.height);
+    var graphAreaRect = Rect.fromLTRB(0, 0, 0, canvasRect.bottom - 24);
 
     // デバッグ用に描画エリアを塗りつぶす
     canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
+      canvasRect,
       Paint()..color = Colors.grey.withOpacity(0.1),
     );
 
     // Y軸の目盛りラベルを描画する
+    final maxValue = values.reduce(math.max);
     final yScaleInterval = _calcScaleInterval(maxValue) ?? maxValue;
     final yScaleCount = (maxValue / yScaleInterval).ceil();
     final yScaleMaxValue = yScaleInterval * yScaleCount;
     final yScaleLabelFormatter = intl.NumberFormat("#,###");
-    var yScaleMaxLabelWidth = 0.0;
     for (var i = yScaleCount; i >= 0; i--) {
       final scaleLabelValue = yScaleInterval * i;
       final textPainter = TextPainter(
@@ -96,38 +92,37 @@ class _Painter extends CustomPainter {
       );
       textPainter.layout();
 
+      const yScaleLabelMargin = 6.0;
       if (i == yScaleCount) {
-        yScaleMaxLabelWidth = textPainter.width;
-        graphAreaRightX = yScaleMaxLabelWidth + 6.0 /* margin */;
-        graphAreaTopY = math.max(graphAreaTopY, textPainter.height * 0.5);
+        graphAreaRect = graphAreaRect.copyWith(
+          top: math.max(graphAreaRect.top, textPainter.height * 0.5),
+          right: canvasRect.right - textPainter.width - yScaleLabelMargin,
+        );
       }
 
       textPainter.paint(
           canvas,
           Offset(
-            size.width - yScaleMaxLabelWidth,
-            (graphAreaBottomY - graphAreaTopY) *
-                (1 - scaleLabelValue / yScaleMaxValue),
+            graphAreaRect.right + yScaleLabelMargin,
+            graphAreaRect.height * (1 - scaleLabelValue / yScaleMaxValue),
           ));
     }
 
     // X軸の目盛りラベル・棒グラフを描画する
-    final yLabelAreaWidth = size.width - graphAreaRightX;
-    final unitWidth = yLabelAreaWidth / values.length;
+    final xItemWidth = graphAreaRect.width / values.length;
     for (var i = 0; i < values.length; i++) {
       final value = values[i];
-      final barWidth = unitWidth * 0.25;
-      final barHeight = (value / yScaleMaxValue) *
-          (graphAreaBottomY - graphAreaTopY) *
-          animationValue;
+      final barWidth = xItemWidth * 0.25;
+      final barHeight =
+          (value / yScaleMaxValue) * graphAreaRect.height * animationValue;
       canvas.save();
-      canvas.translate(i * unitWidth + unitWidth * 0.5, 0);
+      canvas.translate((i + 0.5) * xItemWidth, 0);
 
       // 棒グラフを描画する
       canvas.drawRect(
         Rect.fromLTWH(
           -barWidth * 0.5,
-          graphAreaBottomY - barHeight,
+          graphAreaRect.bottom - barHeight,
           barWidth,
           barHeight,
         ),
@@ -150,15 +145,16 @@ class _Painter extends CustomPainter {
       textPainter.layout();
       textPainter.paint(
         canvas,
-        Offset(-textPainter.width * 0.5, size.height - textPainter.height),
+        Offset(
+            -textPainter.width * 0.5, canvasRect.bottom - textPainter.height),
       );
 
       // 破線を描画する
       _drawDashedVerticalLine(
         canvas,
-        unitWidth * 0.5,
-        graphAreaTopY,
-        size.height,
+        xItemWidth * 0.5,
+        graphAreaRect.top,
+        canvasRect.bottom,
         Paint()
           ..color = Colors.black
           ..style = PaintingStyle.stroke
@@ -215,5 +211,21 @@ class _Painter extends CustomPainter {
       }
     }
     return null;
+  }
+}
+
+extension RectExt on Rect {
+  Rect copyWith({
+    double? left,
+    double? top,
+    double? right,
+    double? bottom,
+  }) {
+    return Rect.fromLTRB(
+      left ?? this.left,
+      top ?? this.top,
+      right ?? this.right,
+      bottom ?? this.bottom,
+    );
   }
 }
